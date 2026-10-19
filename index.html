@@ -92,8 +92,8 @@
 
 <script>
 const P = {
-  w: {f:'url(#fW)', mid:'#dde4f2', st:'#1c2233', ac:'url(#aW)', acs:'#3d7fd0', wing:'url(#wW)', shade:'#1c2a55'},
-  b: {f:'url(#fB)', mid:'#4b4b63', st:'#07070b', ac:'url(#aB)', acs:'#f0b429', wing:'url(#wB)', shade:'#000'}
+  w: {f:'url(#fW)', mid:'#f2f2f2', st:'#1c1c1c', ac:'url(#aW)', acs:'#6b6b6b', wing:'url(#wW)', shade:'#000'},
+  b: {f:'url(#fB)', mid:'#303030', st:'#050505', ac:'url(#aB)', acs:'#d0d0d0', wing:'url(#wB)', shade:'#000'}
 };
 const fat = (c, d, w, extra='') =>
   `<path d="${d}" fill="none" stroke="${c.st}" stroke-width="${w+5}" stroke-linecap="round" stroke-linejoin="round"/>` +
@@ -109,9 +109,9 @@ const ART = {
     <circle cx="15" cy="30" r="6" fill="${c.ac}" ${OUT(c)}/><circle cx="85" cy="30" r="6" fill="${c.ac}" ${OUT(c)}/>
     <path d="M46 2 H54 V8 H60 V15 H54 V23 H46 V15 H40 V8 H46Z" fill="${c.ac}" ${OUT(c)}/>
     <path d="M22 66 H78 L80 78 H20Z" fill="${c.ac}" ${OUT(c)}/>
-    <circle cx="36" cy="72" r="3.2" fill="#e5383b" stroke="${c.st}" stroke-width="1.5"/>
-    <circle cx="50" cy="72" r="3.8" fill="#4cc9f0" stroke="${c.st}" stroke-width="1.5"/>
-    <circle cx="64" cy="72" r="3.2" fill="#e5383b" stroke="${c.st}" stroke-width="1.5"/>
+    <circle cx="36" cy="72" r="3.2" fill="${c.mid}" stroke="${c.st}" stroke-width="1.5"/>
+    <circle cx="50" cy="72" r="3.8" fill="${c.mid}" stroke="${c.st}" stroke-width="1.5"/>
+    <circle cx="64" cy="72" r="3.2" fill="${c.mid}" stroke="${c.st}" stroke-width="1.5"/>
     <rect x="17" y="78" width="66" height="13" rx="6.5" fill="${c.f}" ${OUT(c)}/>
     <rect x="21" y="80" width="30" height="3" rx="1.5" fill="#fff" opacity=".45"/>`,
 
@@ -138,7 +138,7 @@ const ART = {
     <path d="M33 14 C41 7 59 7 67 14" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/>
     <ellipse cx="50" cy="38" rx="16" ry="20" fill="url(#vortex)" stroke="${c.acs}" stroke-width="3"/>
     <path d="M40 34 C48 24 62 32 58 42 C54 50 44 46 49 40" fill="none" stroke="${c.acs}" stroke-width="2" opacity=".75" stroke-linecap="round"/>
-    <g filter="url(#glow)"><ellipse cx="43.5" cy="40" rx="3.6" ry="5" fill="${c.acs}"/><ellipse cx="56.5" cy="40" rx="3.6" ry="5" fill="${c.acs}"/></g>
+    <g filter="url(#glow)"><ellipse cx="43.5" cy="40" rx="3.6" ry="5" fill="#fff"/><ellipse cx="56.5" cy="40" rx="3.6" ry="5" fill="#fff"/></g>
     <ellipse cx="43.5" cy="40" rx="2" ry="3.2" fill="#fff"/><ellipse cx="56.5" cy="40" rx="2" ry="3.2" fill="#fff"/>
     <path d="M34 62 C42 70 58 70 66 62" fill="none" stroke="${c.st}" stroke-width="3" stroke-linecap="round" opacity=".6"/>
     <circle cx="50" cy="70" r="6" fill="${c.ac}" ${OUT(c)}/><circle cx="50" cy="70" r="2" fill="#fff" opacity=".8"/>
@@ -164,9 +164,9 @@ const ART = {
     <path d="M22 83 l4 -12 M36 88 l3 -11 M62 86 l-3 -11" stroke="${c.acs}" stroke-width="3" stroke-linecap="round"/>
     <path d="M36 28 C28 10 62 0 72 12 C82 24 66 38 50 38 C42 38 38 34 36 28Z" fill="${c.f}" ${OUT(c)}/>
     <path d="M45 8 C55 4 66 8 69 14 C60 12 50 12 45 8Z" fill="#fff" opacity=".5"/>
-    <ellipse cx="58" cy="18" rx="5.6" ry="4.6" fill="#ffd23f" stroke="${c.st}" stroke-width="1.8"/>
+    <ellipse cx="58" cy="18" rx="5.6" ry="4.6" fill="#fff" stroke="${c.st}" stroke-width="1.8"/>
     <ellipse cx="59" cy="18" rx="1.5" ry="3.8" fill="#111"/>
-    <path d="M72 26 L88 36 M88 36 L95 31 M88 36 L94 43" fill="none" stroke="#e5383b" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M72 26 L88 36 M88 36 L95 31 M88 36 L94 43" fill="none" stroke="${c.st}" stroke-width="2.6" stroke-linecap="round"/>
     <path d="M62 31 L64 38 L67 30Z" fill="#fff" stroke="${c.st}" stroke-width="1.2"/>`,
 
   N: c => `${SHADOW}
@@ -188,13 +188,13 @@ const ART = {
     <circle cx="40.5" cy="19.5" r="2.4" fill="#fff"/><circle cx="55.5" cy="19.5" r="2.4" fill="#fff"/>`
 };
 const DEFS = `<svg width="0" height="0" style="position:absolute"><defs>
-  <linearGradient id="fW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c6de"/></linearGradient>
-  <linearGradient id="fB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a8aa6"/><stop offset="1" stop-color="#20202e"/></linearGradient>
-  <linearGradient id="aW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a9d6ff"/><stop offset="1" stop-color="#3b78cf"/></linearGradient>
-  <linearGradient id="aB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset="1" stop-color="#e2a21b"/></linearGradient>
-  <linearGradient id="wW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e9f6ff" stop-opacity=".9"/><stop offset="1" stop-color="#9cc8f2" stop-opacity=".7"/></linearGradient>
-  <linearGradient id="wB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".85"/><stop offset="1" stop-color="#d98b2b" stop-opacity=".65"/></linearGradient>
-  <radialGradient id="vortex"><stop offset="0" stop-color="#4b1d7a"/><stop offset=".6" stop-color="#14062a"/><stop offset="1" stop-color="#03010a"/></radialGradient>
+  <linearGradient id="fW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2f2f2"/><stop offset="1" stop-color="#f2f2f2"/></linearGradient>
+  <linearGradient id="fB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#303030"/><stop offset="1" stop-color="#303030"/></linearGradient>
+  <linearGradient id="aW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2f2f2"/><stop offset="1" stop-color="#f2f2f2"/></linearGradient>
+  <linearGradient id="aB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#303030"/><stop offset="1" stop-color="#303030"/></linearGradient>
+  <linearGradient id="wW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2f2f2" stop-opacity=".8"/><stop offset="1" stop-color="#f2f2f2" stop-opacity=".8"/></linearGradient>
+  <linearGradient id="wB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#303030" stop-opacity=".75"/><stop offset="1" stop-color="#303030" stop-opacity=".75"/></linearGradient>
+  <radialGradient id="vortex"><stop offset="0" stop-color="#2a2a2a"/><stop offset=".6" stop-color="#0c0c0c"/><stop offset="1" stop-color="#000"/></radialGradient>
   <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs></svg>`;
 const NAME = {K:'King', Q:'Kraken', P:'Void Walker', B:'Scissors', R:'Snake', N:'Dragonfly'};
