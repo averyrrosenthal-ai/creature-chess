@@ -30,6 +30,17 @@
   .sq.chk { background:#e05555 !important; }
   .sq.mv::after { content:""; position:absolute; width:30%; height:30%; border-radius:50%; background:#2e9e4fcc; }
   .sq.cp { box-shadow:inset 0 0 0 5px #d62828; }
+  #tut { width:min(92vw,640px); box-sizing:border-box; background:#2c2620; border:2px solid #c9a25a; border-radius:10px; padding:10px 14px; margin-bottom:8px; line-height:1.4; }
+  #tut .tt { font-weight:700; font-size:1.1rem; margin-bottom:4px; color:#ffe9a0; }
+  #tut .tb { margin-top:8px; display:flex; gap:8px; }
+  #tut .b { color:#5fb3ff; font-weight:700; } #tut .r { color:#ff6b6b; font-weight:700; }
+  @keyframes pb { 0%,100% { box-shadow:inset 0 0 0 4px #3aa0ff; } 50% { box-shadow:inset 0 0 0 9px #3aa0ffaa; } }
+  @keyframes pr { 0%,100% { box-shadow:inset 0 0 0 4px #ff4d4d; } 50% { box-shadow:inset 0 0 0 9px #ff4d4daa; } }
+  .sq.hmv { animation:pb 1.2s infinite; } .sq.hcap { animation:pr 1.2s infinite; }
+  :fullscreen body, body:fullscreen { overflow:auto; justify-content:center; min-height:100vh; box-sizing:border-box; }
+  :fullscreen #board { width:min(78vh,92vw); }
+  :fullscreen #tut { width:min(78vh,92vw); }
+  :fullscreen details { display:none; }
   .btns { margin:8px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   button { font-size:1rem; padding:8px 14px; border:0; border-radius:8px; background:#c9a25a; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
@@ -41,11 +52,14 @@
 <body>
 <h1>Creature Chess</h1>
 <div id="status"></div>
+<div id="tut" hidden></div>
 <div id="board"></div>
 <div class="btns">
   <button id="skipMove">Skip move (just capture)</button>
   <button id="skipCap">Pass turn</button>
   <button id="restart">New game</button>
+  <button id="tutBtn">📖 Tutorial</button>
+  <button id="fsBtn">⛶ Full screen</button>
 </div>
 <details open>
   <summary>How the pieces work</summary>
@@ -320,6 +334,7 @@ function hasAnyLegalTurn(side) {
 }
 
 function endTurn() {
+  if (tut) { tutEnd(); return; }
   turn = turn === 'w' ? 'b' : 'w'; phase = 'select'; sel = null; mvList = []; capList = [];
   inCheck = !kingSafe(board, turn);
   if (!hasAnyLegalTurn(turn)) over = inCheck ? 'mate' : 'stalemate';
@@ -365,6 +380,7 @@ function render() {
     if (inCheck && pc && pc.t === 'K' && pc.p === turn) d.classList.add('chk');
     if (has(mv,r,c)) d.classList.add('mv');
     if (has(cp,r,c)) d.classList.add('cp');
+    if (tut && !tut.done) { const H = LESSONS[tut.i].hint; if (H && has(H.mv,r,c) && phase !== 'capture') d.classList.add('hmv'); if (H && has(H.cap,r,c) && pc && pc.p === 'b') d.classList.add('hcap'); }
     if (pc) {
       const p = document.createElement('div');
       p.className = 'piece ' + pc.p; p.title = NAME[pc.t];
@@ -384,15 +400,89 @@ function render() {
   else if (phase === 'select') msg = `${who}: pick a piece to MOVE${chk}`;
   else if (phase === 'move') msg = mvList.length ? `${who}: move ${NAME[board[sel.r][sel.c].t]} (green dots)` : `${who}: that piece has no legal move${chk}`;
   else msg = sel ? `${who}: pick a red target to capture` : `${who}: now CAPTURE with any highlighted piece` + (kingSafe(board, turn) ? ' (or skip)' : '');
+  if (tut) msg = tutMsg || (over === 'info' ? 'Read the lesson, then press Next' : msg);
   document.getElementById('status').textContent = msg;
   const sm = document.getElementById('skipMove'), sc = document.getElementById('skipCap');
   sm.disabled = !!over || phase === 'capture' || !anyLegalCap(board, turn);
   sc.textContent = phase === 'capture' ? 'Skip capture / end turn' : 'Pass turn';
   sc.disabled = !!over || !kingSafe(board, turn);
 }
+// ---- interactive tutorial ----
+let tut = null, tutMsg = '';
+function startBoard() {
+  const b = Array.from({length:8}, () => Array(8).fill(null));
+  const back = ['R','N','B','Q','K','B','N','R'];
+  for (let c = 0; c < 8; c++) { b[0][c] = {t:back[c], p:'b'}; b[1][c] = {t:'P', p:'b'}; b[6][c] = {t:'P', p:'w'}; b[7][c] = {t:back[c], p:'w'}; }
+  return b;
+}
+function mkBoard(list) {
+  const b = Array.from({length:8}, () => Array(8).fill(null));
+  for (const [t,p,r,c] of list) b[r][c] = {t,p};
+  if (!list.some(x => x[0]==='K' && x[1]==='w')) b[7][0] = {t:'K', p:'w'};
+  if (!list.some(x => x[0]==='K' && x[1]==='b')) b[0][7] = {t:'K', p:'b'};
+  return b;
+}
+const LESSONS = [
+  {title:'Welcome!', info:true, start:true, hint:{mv:[],cap:[]},
+   text:'Each turn you <b>move</b> one piece, then <b>capture</b> with any piece you like &mdash; it can even be a different piece than the one that moved. Most pieces capture <b>without</b> moving. Next, you will try every piece yourself!'},
+  {title:'🐍 Snake', pieces:[['R','w',4,3],['P','b',3,6]], hint:{mv:[[4,6]], cap:[[3,6]]},
+   text:'The Snake moves in straight lines (any distance) and captures every square touching it. <b>1)</b> Click the Snake and then the <span class="b">blue</span> square. <b>2)</b> Click the Snake again and then the <span class="r">red</span> enemy.'},
+  {title:'✂️ Scissors', pieces:[['B','w',6,2],['P','b',2,5]], hint:{mv:[[4,4]], cap:[[2,5]]},
+   text:'Scissors move diagonally and capture a cone in front of them (3 squares in the first row, 5 in the second). Move to the <span class="b">blue</span> square, then capture the <span class="r">red</span> enemy.'},
+  {title:'🐙 Kraken', pieces:[['Q','w',5,2],['P','b',3,7]], hint:{mv:[[3,4]], cap:[[3,7]]},
+   text:'The Kraken moves 1 square any way, or 2 diagonally. It captures in all 8 directions up to 4 squares away. Hop to the <span class="b">blue</span> square, then capture the far enemy.'},
+  {title:'👤 Void Walker', pieces:[['P','w',6,4],['P','b',3,3],['P','b',2,2]], hint:{mv:[[4,4]], cap:[[2,2],[3,3]]},
+   text:'An unmoved Void Walker can step 2 forward. It captures diagonally 1 <i>or 2</i> squares (hopping over pieces) and <b>moves</b> to where it captures. Step to the <span class="b">blue</span> square, then capture any enemy.'},
+  {title:'🪰 Dragonfly', pieces:[['N','w',6,3],['P','b',6,7]], hint:{mv:[[4,5]], cap:[[6,7]]},
+   text:'The Dragonfly jumps to squares exactly 2 away, and also <b>moves</b> there to capture. Fly to the <span class="b">blue</span> square, then capture the enemy (it is exactly 2 away from there).'},
+  {title:'👑 King & check', pieces:[['K','w',6,3],['P','b',5,4]], hint:{mv:[], cap:[[5,4]]},
+   text:'Your King is in <b>check</b> (red)! The enemy could capture it next turn. Press <b>Skip move</b>, click your King and capture the attacker. The King captures adjacent pieces and moves onto them.'},
+  {title:'Two pieces, one turn', pieces:[['R','w',4,1],['B','w',6,5],['P','b',4,4]], hint:{mv:[[2,1]], cap:[[4,4]]},
+   text:'Move the <b>Snake</b> up to the <span class="b">blue</span> square. Then capture the enemy with the <b>Scissors</b> &mdash; a different piece!'},
+  {title:"You're ready!", info:true, start:true, hint:{mv:[],cap:[]},
+   text:'Remember: move, then capture. Never leave your King where an enemy could capture it &mdash; checkmate wins the game. Press <b>Finish</b> to start a real game. Good luck!'}
+];
+const blackCount = b => b.flat().filter(x => x && x.p === 'b' && x.t !== 'K').length;
+function loadLesson(i) {
+  tut.i = i; const L = LESSONS[i];
+  board = L.start ? startBoard() : mkBoard(L.pieces);
+  tut.n0 = blackCount(board); tut.done = false; tutMsg = '';
+  turn = 'w'; phase = 'select'; sel = null; mvList = []; capList = [];
+  over = L.info ? 'info' : null; inCheck = !kingSafe(board, 'w');
+  renderTut(); render();
+}
+function renderTut() {
+  const L = LESSONS[tut.i], last = tut.i === LESSONS.length - 1;
+  document.getElementById('tut').innerHTML =
+    `<div class="tt">Lesson ${tut.i + 1} / ${LESSONS.length}: ${L.title}</div><div>${L.text}</div>` +
+    `<div class="tb">${L.info || tut.done ? `<button id="tNext">${last ? 'Finish' : 'Next ▶'}</button>` : `<button id="tSkip">Skip lesson ▶</button>`}` +
+    `<button id="tExit">Exit tutorial</button></div>`;
+  const n = document.getElementById('tNext'), s = document.getElementById('tSkip');
+  if (n) n.onclick = tutNext;
+  if (s) s.onclick = tutNext;
+  document.getElementById('tExit').onclick = exitTut;
+}
+function tutNext() { if (tut.i + 1 < LESSONS.length) loadLesson(tut.i + 1); else exitTut(); }
+function exitTut() { tut = null; tutMsg = ''; document.getElementById('tut').hidden = true; init(); }
+function startTut() { tut = {i:0}; document.getElementById('tut').hidden = false; loadLesson(0); }
+function tutEnd() {
+  if (blackCount(board) < tut.n0) { tut.done = true; over = 'info'; tutMsg = '✅ Nice work! Press Next.'; renderTut(); render(); }
+  else { loadLesson(tut.i); tutMsg = 'Not quite — try again!'; render(); }
+}
+document.getElementById('tutBtn').onclick = startTut;
+
 document.getElementById('skipMove').onclick = () => { if (!over && phase !== 'capture') enterCapture(); };
 document.getElementById('skipCap').onclick = () => { if (!over) endTurn(); };
 document.getElementById('restart').onclick = init;
+const fsBtn = document.getElementById('fsBtn'), root = document.documentElement;
+function toggleFS() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else root.requestFullscreen().catch(() => {});
+}
+if (!root.requestFullscreen) fsBtn.hidden = true;
+fsBtn.onclick = toggleFS;
+document.addEventListener('fullscreenchange', () => { fsBtn.textContent = document.fullscreenElement ? '⛶ Exit full screen' : '⛶ Full screen'; });
+document.addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') toggleFS(); });
 document.body.insertAdjacentHTML("afterbegin", DEFS);
 init();
 </script>
