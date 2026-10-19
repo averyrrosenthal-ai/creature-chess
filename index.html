@@ -41,6 +41,8 @@
   :fullscreen #board { width:min(78vh,92vw); }
   :fullscreen #tut { width:min(78vh,92vw); }
   :fullscreen details { display:none; }
+  select { font-size:1rem; padding:6px 8px; border-radius:8px; border:0; background:#c9a25a; }
+  .sq.last::before { content:""; position:absolute; inset:0; background:#ffd166; opacity:.45; pointer-events:none; }
   .btns { margin:8px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   button { font-size:1rem; padding:8px 14px; border:0; border-radius:8px; background:#c9a25a; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
@@ -52,6 +54,18 @@
 <body>
 <h1>Creature Chess</h1>
 <div id="status"></div>
+<div class="btns" id="opp">
+  <label>Opponent:
+    <select id="modeSel">
+      <option value="2p">Two players</option>
+      <option value="first">Bot: First game</option>
+      <option value="beginner">Bot: Beginner</option>
+      <option value="intermediate">Bot: Intermediate</option>
+      <option value="advanced">Bot: Advanced</option>
+      <option value="master">Bot: Master</option>
+    </select>
+  </label>
+</div>
 <div id="tut" hidden></div>
 <div id="board"></div>
 <div class="btns">
@@ -66,7 +80,7 @@
   <ul>
     <li><b>Your turn:</b> <b>move</b> one piece (green dots), then <b>capture</b> with any piece you like (red) &mdash; it can be a different piece than the one that moved. You may skip either part.</li>
     <li>Capturing does <b>not</b> move your piece &mdash; except the Void Walker, Dragonfly and King, which move onto the captured square.</li>
-    <li><b>Check is normal:</b> your king can't be left where an enemy can capture it right now (only attacks count as check, not where enemies could move). No legal turn while in check = checkmate; no legal turn otherwise = stalemate.</li>
+    <li><b>Check is normal:</b> your king can't be left where an enemy can capture it right now (only attacks count as check, not where enemies could move). No legal turn while in check = checkmate; no legal turn otherwise = stalemate. Since you move <i>then</i> capture, a king that gets captured loses the game too.</li>
     <li>🐙 <b>Kraken</b> (queen): moves 1 square any direction or 2 diagonally. Captures in all 8 directions up to 4 squares (first piece in the way).</li>
     <li>👤 <b>Void Walker</b> (pawn): moves 1 forward (or 2 forward if it hasn't moved yet); if a piece is in front it hops over to the square beyond. Moves to capture diagonally 1 square, or 2 squares (jumping a piece in the way). Never promotes.</li>
     <li>✂️ <b>Scissors</b> (bishop): moves diagonally any distance. Captures a forward cone: 3 squares in the first row, 5 in the second.</li>
@@ -188,6 +202,7 @@ const MOVES_ON_CAPTURE = {P:true, N:true, K:true};
 let board, turn, phase, sel, mvList, capList, over, inCheck;
 
 function init() {
+  botToken++; lastBot = null;
   board = Array.from({length:8}, () => Array(8).fill(null));
   const back = ['R','N','B','Q','K','B','N','R'];
   for (let c = 0; c < 8; c++) {
@@ -333,8 +348,10 @@ function endTurn() {
   if (tut) { tutEnd(); return; }
   turn = turn === 'w' ? 'b' : 'w'; phase = 'select'; sel = null; mvList = []; capList = [];
   inCheck = !kingSafe(board, turn);
-  if (!hasAnyLegalTurn(turn)) over = inCheck ? 'mate' : 'stalemate';
+  if (!board.flat().some(x => x && x.t === 'K' && x.p === turn)) over = 'kingcap';
+  else if (!hasAnyLegalTurn(turn)) over = inCheck ? 'mate' : 'stalemate';
   render();
+  maybeBot();
 }
 function enterCapture() {
   phase = 'capture'; sel = null; capList = [];
@@ -343,7 +360,7 @@ function enterCapture() {
   render();
 }
 function click(r,c) {
-  if (over) return;
+  if (over || botTurn()) return;
   const pc = board[r][c];
   if (phase === 'capture') {
     if (sel) {
@@ -376,6 +393,7 @@ function render() {
     if (inCheck && pc && pc.t === 'K' && pc.p === turn) d.classList.add('chk');
     if (has(mv,r,c)) d.classList.add('mv');
     if (has(cp,r,c)) d.classList.add('cp');
+    if (lastBot && !tut && ((lastBot.mv && (lastBot.mv[0][0]===r && lastBot.mv[0][1]===c || lastBot.mv[1][0]===r && lastBot.mv[1][1]===c)) || (lastBot.cap && lastBot.cap[1][0]===r && lastBot.cap[1][1]===c))) d.classList.add('last');
     if (tut && !tut.done) { const H = LESSONS[tut.i].hint; if (H && has(H.mv,r,c) && phase !== 'capture') d.classList.add('hmv'); if (H && has(H.cap,r,c) && pc && pc.p === 'b') d.classList.add('hcap'); }
     if (pc) {
       const p = document.createElement('div');
@@ -392,16 +410,18 @@ function render() {
   const chk = inCheck ? ' — you are in CHECK!' : '';
   let msg;
   if (over === 'mate') msg = `🏆 Checkmate! ${other} wins.`;
+  else if (over === 'kingcap') msg = `👑 King captured! ${other} wins.`;
   else if (over === 'stalemate') msg = `🤝 Stalemate — draw.`;
   else if (phase === 'select') msg = `${who}: pick a piece to MOVE${chk}`;
   else if (phase === 'move') msg = mvList.length ? `${who}: move ${NAME[board[sel.r][sel.c].t]} (green dots)` : `${who}: that piece has no legal move${chk}`;
   else msg = sel ? `${who}: pick a red target to capture` : `${who}: now CAPTURE with any highlighted piece` + (kingSafe(board, turn) ? ' (or skip)' : '');
+  if (botTurn() && !over) msg = '🤖 Bot is thinking…';
   if (tut) msg = tutMsg || (over === 'info' ? 'Read the lesson, then press Next' : msg);
   document.getElementById('status').textContent = msg;
   const sm = document.getElementById('skipMove'), sc = document.getElementById('skipCap');
-  sm.disabled = !!over || phase === 'capture' || !anyLegalCap(board, turn);
+  sm.disabled = !!over || botTurn() || phase === 'capture' || !anyLegalCap(board, turn);
   sc.textContent = phase === 'capture' ? 'Skip capture / end turn' : 'Pass turn';
-  sc.disabled = !!over || !kingSafe(board, turn);
+  sc.disabled = !!over || botTurn() || !kingSafe(board, turn);
 }
 // ---- interactive tutorial ----
 let tut = null, tutMsg = '';
@@ -467,6 +487,102 @@ function tutEnd() {
 }
 document.getElementById('tutBtn').onclick = startTut;
 
+// ---- computer opponent (plays Black) ----
+let mode = '2p', botToken = 0, lastBot = null;
+const MODES = {first:'First game', beginner:'Beginner', intermediate:'Intermediate', advanced:'Advanced', master:'Master'};
+const botTurn = () => mode !== '2p' && !tut && turn === 'b';
+const VAL = {P:100, N:330, B:300, R:380, Q:800, K:50000};
+const MATE = 100000;
+const other = s => s === 'w' ? 'b' : 'w';
+
+function cheapEval(b, side) {
+  let m = 0;
+  for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+    const pc = b[r][c]; if (!pc) continue;
+    let v = VAL[pc.t] + (3 - Math.max(Math.abs(r-3.5), Math.abs(c-3.5))) * 3;
+    if (pc.t === 'P') v += 6 * (pc.p === 'w' ? 6 - r : r - 1);
+    m += pc.p === side ? v : -v;
+  }
+  return m;
+}
+function threat(b, s) {                       // total value of enemy pieces that s could capture right now
+  const hit = new Set();
+  withBoard(b, () => {
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++)
+      if (b[r][c] && b[r][c].p === s) for (const [y,x] of caps(r,c)) hit.add(y*8+x);
+  });
+  let t = 0;
+  for (const k of hit) { const pc = b[k >> 3][k & 7]; t += pc.t === 'K' ? 120 : VAL[pc.t]; }
+  return t;
+}
+function fullEval(b, side, toMove) {
+  const mine = toMove === side;
+  return cheapEval(b, side) + (mine ? 0.45 : 0.2) * threat(b, side) - (mine ? 0.2 : 0.45) * threat(b, other(side));
+}
+
+// every (move, capture) combination for `side`, best-looking first by cheap eval. Returns up to `limit` LEGAL turns.
+function legalTurns(b, side, limit) {
+  const cands = [];
+  const own = bd => { const o = []; for (let r=0; r<8; r++) for (let c=0; c<8; c++) if (bd[r][c] && bd[r][c].p === side) o.push([r,c]); return o; };
+  const starts = [{b, mv:null}];
+  for (const [r,c] of own(b)) for (const m of withBoard(b, () => moves(r,c))) starts.push({b:doMove(b,[r,c],m), mv:[[r,c],m]});
+  for (const s of starts) {
+    if (s.mv) cands.push({b:s.b, mv:s.mv, cap:null});
+    for (const [r,c] of own(s.b))
+      for (const cp of capsOn(s.b, r, c)) cands.push({b:doCapture(s.b,[r,c],cp), mv:s.mv, cap:[[r,c],cp]});
+  }
+  for (const t of cands) t.cheap = cheapEval(t.b, side);
+  cands.sort((x,y) => y.cheap - x.cheap);
+  const out = [];
+  for (const t of cands) { if (kingSafe(t.b, side)) { out.push(t); if (limit && out.length >= limit) break; } }
+  return out;
+}
+const BEAM = {1:5, 2:7, 3:12};
+function search(b, side, depth) {             // value for `side` to move
+  let L = legalTurns(b, side, BEAM[depth] || 6);
+  if (!L.length) return kingSafe(b, side) ? fullEval(b, side, side) : -MATE - depth;   // only a pass left / checkmated
+  if (depth === 1) return Math.max(...L.map(t => fullEval(t.b, side, other(side))));
+  let best = -Infinity;
+  for (const t of L) best = Math.max(best, -search(t.b, other(side), depth - 1));
+  return best;
+}
+function pickBotTurn(side = 'b') {
+  if (mode === 'first') {
+    const L = legalTurns(board, side);
+    if (!L.length) return null;
+    const capTurns = L.filter(t => t.cap);
+    const pool = capTurns.length && Math.random() < 0.3 ? capTurns : L;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  const cfg = {beginner:{d:0, beam:40, noise:450}, intermediate:{d:1, beam:8, noise:12},
+               advanced:{d:2, beam:10, noise:8}, master:{d:3, beam:12, noise:0}}[mode];
+  const L = legalTurns(board, side, cfg.beam);
+  if (!L.length) return null;
+  let best = null, bestV = -Infinity;
+  for (const t of L) {
+    let v;
+    if (cfg.d === 0) v = cheapEval(t.b, side);
+    else if (cfg.d === 1) v = fullEval(t.b, side, other(side));
+    else v = -search(t.b, other(side), cfg.d - 1);
+    v += (Math.random() - 0.5) * 2 * cfg.noise;
+    if (v > bestV) { bestV = v; best = t; }
+  }
+  return best;
+}
+function maybeBot() {
+  if (!botTurn() || over) return;
+  const tok = ++botToken;
+  setTimeout(() => {
+    if (tok !== botToken || !botTurn() || over) return;
+    const t = pickBotTurn();
+    if (t) { board = t.b; lastBot = t; }
+    endTurn();
+  }, 400);
+}
+
+const modeSel = document.getElementById('modeSel');
+try { const m = localStorage.getItem('ccMode'); if (m && [...modeSel.options].some(o => o.value === m)) { mode = m; modeSel.value = m; } } catch (e) {}
+modeSel.onchange = () => { mode = modeSel.value; try { localStorage.setItem('ccMode', mode); } catch (e) {} if (tut) exitTut(); else init(); };
 document.getElementById('skipMove').onclick = () => { if (!over && phase !== 'capture') enterCapture(); };
 document.getElementById('skipCap').onclick = () => { if (!over) endTurn(); };
 document.getElementById('restart').onclick = init;
