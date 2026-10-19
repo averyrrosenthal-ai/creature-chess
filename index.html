@@ -66,7 +66,7 @@
   <ul>
     <li><b>Your turn:</b> <b>move</b> one piece (green dots), then <b>capture</b> with any piece you like (red) &mdash; it can be a different piece than the one that moved. You may skip either part.</li>
     <li>Capturing does <b>not</b> move your piece &mdash; except the Void Walker, Dragonfly and King, which move onto the captured square.</li>
-    <li><b>Check is normal:</b> your king can't be left where an enemy could capture it next turn. No legal turn while in check = checkmate; no legal turn otherwise = stalemate.</li>
+    <li><b>Check is normal:</b> your king can't be left where an enemy can capture it right now (only attacks count as check, not where enemies could move). No legal turn while in check = checkmate; no legal turn otherwise = stalemate.</li>
     <li>🐙 <b>Kraken</b> (queen): moves 1 square any direction or 2 diagonally. Captures in all 8 directions up to 4 squares (first piece in the way).</li>
     <li>👤 <b>Void Walker</b> (pawn): moves 1 forward (or 2 forward if it hasn't moved yet); if a piece is in front it hops over to the square beyond. Moves to capture diagonally 1 square, or 2 squares (jumping a piece in the way). Never promotes.</li>
     <li>✂️ <b>Scissors</b> (bishop): moves diagonally any distance. Captures a forward cone: 3 squares in the first row, 5 in the second.</li>
@@ -290,7 +290,8 @@ function doMove(b, fr, to) {
   n[to[0]][to[1]] = n[fr[0]][fr[1]]; n[fr[0]][fr[1]] = null;
   return n;
 }
-// Can `side`'s king be captured by the other side on their next turn (move, then capture)?
+// Check: is `side`'s king attacked, i.e. can any enemy piece capture it from where it stands right now?
+// (Only capture ranges count; where enemies could move to does not.)
 function kingSafe(b, side) {
   return withBoard(b, () => {
     let kr = -1, kc = -1;
@@ -299,12 +300,7 @@ function kingSafe(b, side) {
     if (kr < 0) return false;
     for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
       const pc = board[r][c];
-      if (!pc || pc.p === side) continue;
-      if (has(caps(r,c), kr, kc)) return false;
-      for (const m of moves(r,c)) {
-        const b2 = doMove(board, [r,c], m);
-        if (withBoard(b2, () => has(caps(m[0],m[1]), kr, kc))) return false;
-      }
+      if (pc && pc.p !== side && has(caps(r,c), kr, kc)) return false;
     }
     return true;
   });
