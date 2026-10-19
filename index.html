@@ -415,7 +415,7 @@ function render() {
   else if (phase === 'select') msg = `${who}: pick a piece to MOVE${chk}`;
   else if (phase === 'move') msg = mvList.length ? `${who}: move ${NAME[board[sel.r][sel.c].t]} (green dots)` : `${who}: that piece has no legal move${chk}`;
   else msg = sel ? `${who}: pick a red target to capture` : `${who}: now CAPTURE with any highlighted piece` + (kingSafe(board, turn) ? ' (or skip)' : '');
-  if (botTurn() && !over) msg = '🤖 Bot is thinking…';
+  if (botTurn() && !over) msg = botNote;
   if (tut) msg = tutMsg || (over === 'info' ? 'Read the lesson, then press Next' : msg);
   document.getElementById('status').textContent = msg;
   const sm = document.getElementById('skipMove'), sc = document.getElementById('skipCap');
@@ -569,17 +569,35 @@ function pickBotTurn(side = 'b') {
   }
   return best;
 }
+let botNote = '🤖 Bot is thinking…';
 function maybeBot() {
   if (!botTurn() || over) return;
   const tok = ++botToken;
-  setTimeout(() => {
-    if (tok !== botToken || !botTurn() || over) return;
+  const alive = () => tok === botToken && botTurn() && !over;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  (async () => {
+    botNote = '🤖 Bot is thinking…'; render();
+    await wait(1000 + Math.random() * 600);
+    if (!alive()) return;
     const t = pickBotTurn();
-    if (t) { board = t.b; lastBot = t; }
+    if (t && t.mv) {                              // stage 1: show the move
+      botNote = '🤖 Bot is moving…';
+      board = doMove(board, t.mv[0], t.mv[1]);
+      lastBot = {mv:t.mv, cap:null}; render();
+      await wait(900);
+      if (!alive()) return;
+    }
+    if (t && t.cap) {                             // stage 2: show the capture
+      botNote = '🤖 Bot is capturing…';
+      lastBot = t; render();
+      await wait(600);
+      if (!alive()) return;
+      board = t.b;
+    }
+    if (t) lastBot = t;
     endTurn();
-  }, 400);
+  })();
 }
-
 const modeSel = document.getElementById('modeSel');
 try { const m = localStorage.getItem('ccMode'); if (m && [...modeSel.options].some(o => o.value === m)) { mode = m; modeSel.value = m; } } catch (e) {}
 modeSel.onchange = () => { mode = modeSel.value; try { localStorage.setItem('ccMode', mode); } catch (e) {} if (tut) exitTut(); else init(); };
