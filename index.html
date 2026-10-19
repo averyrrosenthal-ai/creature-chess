@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creature Chess</title>
+<style>
+  :root { --light:#f0d9b5; --dark:#b58863; --bg:#1e1b18; --fg:#f1e9d8; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:12px; }
+  h1 { margin:4px 0; font-size:1.5rem; }
+  #status { font-size:1.15rem; margin:6px 0; min-height:1.5em; text-align:center; }
+  #board { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); grid-template-rows:repeat(8,minmax(0,1fr)); width:min(92vw,640px); aspect-ratio:1;
+           border:4px solid #4a3623; }
+  .sq { position:relative; display:flex; align-items:center; justify-content:center;
+        font-size:min(7vw,46px); cursor:pointer; user-select:none; }
+  .sq.l { background:var(--light); } .sq.d { background:var(--dark); }
+  .piece { width:92%; height:92%; filter:drop-shadow(0 2px 2px #0005); pointer-events:none; }
+  .piece svg { width:100%; height:100%; display:block; }
+  .piece.w { --pf:#f7f4ea; --ps:#222; --pa:#5b9bd5; }
+  .piece.b { --pf:#4a4a58; --ps:#0b0b0b; --pa:#f2c94c; }
+  .lbl { position:absolute; font-size:11px; font-weight:700; pointer-events:none; }
+  .lbl.rank { top:2px; left:3px; } .lbl.file { bottom:1px; right:3px; }
+  .sq.l .lbl { color:#b58863; } .sq.d .lbl { color:#f0d9b5; }
+  .sq.sel { outline:4px solid #f5c400; outline-offset:-4px; }
+  .sq.can { box-shadow:inset 0 0 0 4px #f5c400; }
+  .sq.chk { background:#e05555 !important; }
+  .sq.mv::after { content:""; position:absolute; width:30%; height:30%; border-radius:50%; background:#2e9e4fcc; }
+  .sq.cp { box-shadow:inset 0 0 0 5px #d62828; }
+  .btns { margin:8px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  button { font-size:1rem; padding:8px 14px; border:0; border-radius:8px; background:#c9a25a; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  details { max-width:640px; width:92vw; margin-top:10px; }
+  summary { cursor:pointer; font-weight:600; }
+  li { margin:3px 0; }
+</style>
+</head>
+<body>
+<h1>Creature Chess</h1>
+<div id="status"></div>
+<div id="board"></div>
+<div class="btns">
+  <button id="skipMove">Skip move (just capture)</button>
+  <button id="skipCap">Pass turn</button>
+  <button id="restart">New game</button>
+</div>
+<details open>
+  <summary>How the pieces work</summary>
+  <ul>
+    <li><b>Your turn:</b> <b>move</b> one piece (green dots), then <b>capture</b> with any piece you like (red) &mdash; it can be a different piece than the one that moved. You may skip either part.</li>
+    <li>Capturing does <b>not</b> move your piece &mdash; except the Void Walker, Dragonfly and King, which move onto the captured square.</li>
+    <li><b>Check is normal:</b> your king can't be left where an enemy could capture it next turn. No legal turn while in check = checkmate; no legal turn otherwise = stalemate.</li>
+    <li>🐙 <b>Kraken</b> (queen): moves 1 square any direction or 2 diagonally. Captures in all 8 directions up to 4 squares (first piece in the way).</li>
+    <li>👤 <b>Void Walker</b> (pawn): moves 1 forward (or 2 forward if it hasn't moved yet); if a piece is in front it hops over to the square beyond. Moves to capture diagonally 1 square, or 2 squares (jumping a piece in the way). Never promotes.</li>
+    <li>✂️ <b>Scissors</b> (bishop): moves diagonally any distance. Captures a forward cone: 3 squares in the first row, 5 in the second.</li>
+    <li>👑 <b>King</b>: moves 1 square any direction; captures any adjacent piece and moves onto it.</li>
+    <li>🐍 <b>Snake</b> (rook): moves orthogonally any distance. Captures all 8 adjacent squares.</li>
+    <li>🪰 <b>Dragonfly</b> (knight): moves to any empty square exactly 2 away (jumping), and moves there to capture too.</li>
+  </ul>
+</details>
+
+<script>
+const P = {
+  w: {f:'url(#fW)', mid:'#dde4f2', st:'#1c2233', ac:'url(#aW)', acs:'#3d7fd0', wing:'url(#wW)', shade:'#1c2a55'},
+  b: {f:'url(#fB)', mid:'#4b4b63', st:'#07070b', ac:'url(#aB)', acs:'#f0b429', wing:'url(#wB)', shade:'#000'}
+};
+const fat = (c, d, w, extra='') =>
+  `<path d="${d}" fill="none" stroke="${c.st}" stroke-width="${w+5}" stroke-linecap="round" stroke-linejoin="round"/>` +
+  `<path d="${d}" fill="none" stroke="${c.mid}" stroke-width="${w}" stroke-linecap="round" ${extra}/>`;
+const OUT = c => `stroke="${c.st}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"`;
+const SHADOW = '<ellipse cx="50" cy="93" rx="30" ry="4.5" fill="#000" opacity=".28"/>';
+const ART = {
+  K: c => `${SHADOW}
+    <path d="M24 76 L15 32 L36 50 L50 24 L64 50 L85 32 L76 76Z" fill="${c.f}" ${OUT(c)}/>
+    <path d="M50 28 V68" stroke="${c.st}" stroke-width="1.6" opacity=".35"/>
+    <path d="M26 70 L19 40 L35 54 L38 70Z" fill="#fff" opacity=".4"/>
+    <path d="M62 54 L83 38 L76 76 L60 76Z" fill="${c.shade}" opacity=".18"/>
+    <circle cx="15" cy="30" r="6" fill="${c.ac}" ${OUT(c)}/><circle cx="85" cy="30" r="6" fill="${c.ac}" ${OUT(c)}/>
+    <path d="M46 2 H54 V8 H60 V15 H54 V23 H46 V15 H40 V8 H46Z" fill="${c.ac}" ${OUT(c)}/>
+    <path d="M22 66 H78 L80 78 H20Z" fill="${c.ac}" ${OUT(c)}/>
+    <circle cx="36" cy="72" r="3.2" fill="#e5383b" stroke="${c.st}" stroke-width="1.5"/>
+    <circle cx="50" cy="72" r="3.8" fill="#4cc9f0" stroke="${c.st}" stroke-width="1.5"/>
+    <circle cx="64" cy="72" r="3.2" fill="#e5383b" stroke="${c.st}" stroke-width="1.5"/>
+    <rect x="17" y="78" width="66" height="13" rx="6.5" fill="${c.f}" ${OUT(c)}/>
+    <rect x="21" y="80" width="30" height="3" rx="1.5" fill="#fff" opacity=".45"/>`,
+
+  Q: c => `${SHADOW}
+    ${fat(c,'M24 56 C10 64 22 80 8 88',9)}${fat(c,'M36 62 C28 76 42 86 30 95',9)}
+    ${fat(c,'M64 62 C72 76 58 86 70 95',9)}${fat(c,'M76 56 C90 64 78 80 92 88',9)}
+    ${fat(c,'M50 62 C48 78 56 84 50 96',9)}
+    <g fill="${c.acs}" stroke="${c.st}" stroke-width="1.2"><circle cx="15" cy="70" r="2.2"/><circle cx="85" cy="70" r="2.2"/><circle cx="33" cy="78" r="2.2"/><circle cx="67" cy="78" r="2.2"/><circle cx="51" cy="80" r="2.2"/></g>
+    <path d="M19 60 C13 10 87 10 81 60 C70 70 30 70 19 60Z" fill="${c.f}" ${OUT(c)}/>
+    <path d="M70 18 C84 28 84 50 80 60 C76 64 72 66 66 68 C74 50 76 32 70 18Z" fill="${c.shade}" opacity=".16"/>
+    <ellipse cx="36" cy="24" rx="13" ry="6" fill="#fff" opacity=".55" transform="rotate(-25 36 24)"/>
+    <g fill="${c.ac}" stroke="${c.st}" stroke-width="1.5"><circle cx="50" cy="18" r="3.5"/><circle cx="63" cy="22" r="2.7"/><circle cx="73" cy="34" r="2.4"/><circle cx="27" cy="36" r="2.4"/></g>
+    <ellipse cx="38" cy="46" rx="9.5" ry="10.5" fill="#fff" stroke="${c.st}" stroke-width="2.4"/>
+    <ellipse cx="62" cy="46" rx="9.5" ry="10.5" fill="#fff" stroke="${c.st}" stroke-width="2.4"/>
+    <ellipse cx="40" cy="48" rx="4.8" ry="6.2" fill="#14141d"/><ellipse cx="64" cy="48" rx="4.8" ry="6.2" fill="#14141d"/>
+    <circle cx="41.6" cy="45.5" r="1.7" fill="#fff"/><circle cx="65.6" cy="45.5" r="1.7" fill="#fff"/>
+    <path d="M26 35 L46 40" stroke="${c.st}" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M74 35 L54 40" stroke="${c.st}" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M42 62 Q50 67 58 62" fill="none" stroke="${c.st}" stroke-width="2.2" stroke-linecap="round"/>`,
+
+  P: c => `${SHADOW}
+    <path d="M50 4 C26 4 22 30 28 46 C22 62 14 78 11 90 L21 85 L30 91 L39 85 L50 91 L61 85 L70 91 L79 85 L89 90 C86 78 78 62 72 46 C78 30 74 4 50 4Z" fill="${c.f}" ${OUT(c)}/>
+    <path d="M50 4 C74 4 78 30 72 46 C78 62 86 78 89 90 L79 85 L70 91 L62 86 C64 66 62 30 50 4Z" fill="${c.shade}" opacity=".2"/>
+    <path d="M33 14 C41 7 59 7 67 14" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+    <ellipse cx="50" cy="38" rx="16" ry="20" fill="url(#vortex)" stroke="${c.acs}" stroke-width="3"/>
+    <path d="M40 34 C48 24 62 32 58 42 C54 50 44 46 49 40" fill="none" stroke="${c.acs}" stroke-width="2" opacity=".75" stroke-linecap="round"/>
+    <g filter="url(#glow)"><ellipse cx="43.5" cy="40" rx="3.6" ry="5" fill="${c.acs}"/><ellipse cx="56.5" cy="40" rx="3.6" ry="5" fill="${c.acs}"/></g>
+    <ellipse cx="43.5" cy="40" rx="2" ry="3.2" fill="#fff"/><ellipse cx="56.5" cy="40" rx="2" ry="3.2" fill="#fff"/>
+    <path d="M34 62 C42 70 58 70 66 62" fill="none" stroke="${c.st}" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+    <circle cx="50" cy="70" r="6" fill="${c.ac}" ${OUT(c)}/><circle cx="50" cy="70" r="2" fill="#fff" opacity=".8"/>
+    <g fill="${c.acs}" filter="url(#glow)"><circle cx="12" cy="40" r="3.2"/><circle cx="90" cy="30" r="2.6"/><circle cx="84" cy="56" r="2"/><circle cx="17" cy="22" r="2"/></g>`,
+
+  B: c => {
+    const blade = (m) => `<g transform="${m}">
+      <path d="M45 52 L56 74" stroke="${c.st}" stroke-width="13" stroke-linecap="round"/>
+      <path d="M45 52 L56 74" stroke="${c.mid}" stroke-width="8" stroke-linecap="round"/>
+      <path d="M32 3 L54 40 L48 60 L38 52Z" fill="${c.f}" ${OUT(c)}/>
+      <path d="M33 8 L46 34 L42 46" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".75"/>
+      <circle cx="59" cy="83" r="10.5" fill="none" stroke="${c.st}" stroke-width="10"/>
+      <circle cx="59" cy="83" r="10.5" fill="none" stroke="${c.ac}" stroke-width="5.5"/>
+    </g>`;
+    return `${SHADOW}${blade('translate(100 0) scale(-1 1)')}${blade('')}
+      <circle cx="50" cy="48" r="5.6" fill="${c.ac}" ${OUT(c)}/><circle cx="50" cy="48" r="1.7" fill="${c.st}"/>`;
+  },
+
+  R: c => `${SHADOW}
+    ${fat(c,'M20 82 C74 94 86 58 52 54 C20 50 24 30 50 28',15)}
+    <path d="M20 82 C74 94 86 58 52 54 C20 50 24 30 50 28" fill="none" stroke="${c.st}" stroke-width="15" stroke-dasharray="1.6 7" opacity=".4"/>
+    <path d="M18 78 C70 88 80 60 52 51 C26 46 28 32 48 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".5"/>
+    <path d="M22 83 l4 -12 M36 88 l3 -11 M62 86 l-3 -11" stroke="${c.acs}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M36 28 C28 10 62 0 72 12 C82 24 66 38 50 38 C42 38 38 34 36 28Z" fill="${c.f}" ${OUT(c)}/>
+    <path d="M45 8 C55 4 66 8 69 14 C60 12 50 12 45 8Z" fill="#fff" opacity=".5"/>
+    <ellipse cx="58" cy="18" rx="5.6" ry="4.6" fill="#ffd23f" stroke="${c.st}" stroke-width="1.8"/>
+    <ellipse cx="59" cy="18" rx="1.5" ry="3.8" fill="#111"/>
+    <path d="M72 26 L88 36 M88 36 L95 31 M88 36 L94 43" fill="none" stroke="#e5383b" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M62 31 L64 38 L67 30Z" fill="#fff" stroke="${c.st}" stroke-width="1.2"/>`,
+
+  N: c => `${SHADOW}
+    <g fill="${c.wing}" stroke="${c.st}" stroke-width="2" opacity=".92">
+      <ellipse cx="26" cy="34" rx="26" ry="9" transform="rotate(-16 26 34)"/><ellipse cx="74" cy="34" rx="26" ry="9" transform="rotate(16 74 34)"/>
+      <ellipse cx="28" cy="52" rx="24" ry="8" transform="rotate(12 28 52)"/><ellipse cx="72" cy="52" rx="24" ry="8" transform="rotate(-12 72 52)"/>
+    </g>
+    <g stroke="${c.st}" stroke-width="1" opacity=".5" fill="none">
+      <path d="M6 40 L44 30 M14 34 L16 42 M26 31 L28 39 M38 29 L38 36"/><path d="M94 40 L56 30 M86 34 L84 42 M74 31 L72 39 M62 29 L62 36"/>
+      <path d="M8 49 L46 56 M18 51 L18 56 M30 53 L30 58"/><path d="M92 49 L54 56 M82 51 L82 56 M70 53 L70 58"/>
+    </g>
+    ${fat(c,'M50 52 L50 90',10)}
+    <path d="M50 52 L50 90" stroke="${c.st}" stroke-width="10" stroke-dasharray="1.6 6" opacity=".45"/>
+    <ellipse cx="50" cy="44" rx="9" ry="13" fill="${c.f}" ${OUT(c)}/>
+    <path d="M45 36 Q43 44 46 52" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".6"/>
+    <path d="M45 15 L40 4 M55 15 L60 4" stroke="${c.st}" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="50" cy="24" r="10" fill="${c.f}" ${OUT(c)}/>
+    <circle cx="42.5" cy="22" r="7.6" fill="${c.ac}" stroke="${c.st}" stroke-width="2.2"/><circle cx="57.5" cy="22" r="7.6" fill="${c.ac}" stroke="${c.st}" stroke-width="2.2"/>
+    <circle cx="40.5" cy="19.5" r="2.4" fill="#fff"/><circle cx="55.5" cy="19.5" r="2.4" fill="#fff"/>`
+};
+const DEFS = `<svg width="0" height="0" style="position:absolute"><defs>
+  <linearGradient id="fW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c6de"/></linearGradient>
+  <linearGradient id="fB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a8aa6"/><stop offset="1" stop-color="#20202e"/></linearGradient>
+  <linearGradient id="aW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a9d6ff"/><stop offset="1" stop-color="#3b78cf"/></linearGradient>
+  <linearGradient id="aB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0a0"/><stop offset="1" stop-color="#e2a21b"/></linearGradient>
+  <linearGradient id="wW" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e9f6ff" stop-opacity=".9"/><stop offset="1" stop-color="#9cc8f2" stop-opacity=".7"/></linearGradient>
+  <linearGradient id="wB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".85"/><stop offset="1" stop-color="#d98b2b" stop-opacity=".65"/></linearGradient>
+  <radialGradient id="vortex"><stop offset="0" stop-color="#4b1d7a"/><stop offset=".6" stop-color="#14062a"/><stop offset="1" stop-color="#03010a"/></radialGradient>
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs></svg>`;
+const NAME = {K:'King', Q:'Kraken', P:'Void Walker', B:'Scissors', R:'Snake', N:'Dragonfly'};
+const MOVES_ON_CAPTURE = {P:true, N:true, K:true};
+let board, turn, phase, sel, mvList, capList, over, inCheck;
+
+function init() {
+  board = Array.from({length:8}, () => Array(8).fill(null));
+  const back = ['R','N','B','Q','K','B','N','R'];
+  for (let c = 0; c < 8; c++) {
+    board[0][c] = {t:back[c], p:'b'}; board[1][c] = {t:'P', p:'b'};
+    board[6][c] = {t:'P', p:'w'};     board[7][c] = {t:back[c], p:'w'};
+  }
+  turn = 'w'; phase = 'select'; sel = null; mvList = []; capList = []; over = null; inCheck = false;
+  render();
+}
+const inb = (r,c) => r>=0 && r<8 && c>=0 && c<8;
+const fwd = p => p === 'w' ? -1 : 1;
+const DIRS8 = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
+const ORTH = [[-1,0],[1,0],[0,-1],[0,1]];
+
+function slide(r,c,dirs,list) {
+  for (const [dr,dc] of dirs) {
+    let y=r+dr, x=c+dc;
+    while (inb(y,x) && !board[y][x]) { list.push([y,x]); y+=dr; x+=dc; }
+  }
+}
+// moves() and caps() read the global `board`
+function moves(r,c) {
+  const pc = board[r][c], out = [];
+  const empty = (y,x) => inb(y,x) && !board[y][x];
+  switch (pc.t) {
+    case 'K': for (const [dr,dc] of DIRS8) if (empty(r+dr,c+dc)) out.push([r+dr,c+dc]); break;
+    case 'Q':
+      for (const [dr,dc] of DIRS8) if (empty(r+dr,c+dc)) out.push([r+dr,c+dc]);
+      for (const [dr,dc] of DIAG) if (empty(r+2*dr,c+2*dc)) out.push([r+2*dr,c+2*dc]);
+      break;
+    case 'P': {
+      const f = fwd(pc.p);
+      if (inb(r+f,c)) {
+        if (!board[r+f][c]) {
+          out.push([r+f,c]);
+          const home = pc.p === 'w' ? 6 : 1;   // pawns only move forward, so still on the home row = not moved yet
+          if (r === home && empty(r+2*f,c)) out.push([r+2*f,c]);
+        }
+        else if (empty(r+2*f,c)) out.push([r+2*f,c]);
+      }
+      break;
+    }
+    case 'B': slide(r,c,DIAG,out); break;
+    case 'R': slide(r,c,ORTH,out); break;
+    case 'N':
+      for (let dr=-2; dr<=2; dr++) for (let dc=-2; dc<=2; dc++)
+        if (Math.max(Math.abs(dr),Math.abs(dc)) === 2 && empty(r+dr,c+dc)) out.push([r+dr,c+dc]);
+      break;
+  }
+  return out;
+}
+function caps(r,c) {
+  const pc = board[r][c], out = [];
+  const enemy = (y,x) => inb(y,x) && board[y][x] && board[y][x].p !== pc.p;
+  switch (pc.t) {
+    case 'K': case 'R':
+      for (const [dr,dc] of DIRS8) if (enemy(r+dr,c+dc)) out.push([r+dr,c+dc]); break;
+    case 'Q':
+      for (const [dr,dc] of DIRS8)
+        for (let k=1; k<=4; k++) {
+          const y=r+dr*k, x=c+dc*k;
+          if (!inb(y,x)) break;
+          if (board[y][x]) { if (board[y][x].p !== pc.p) out.push([y,x]); break; }
+        }
+      break;
+    case 'P': {
+      const f = fwd(pc.p);
+      for (const dc of [-1,1]) for (const k of [1,2]) if (enemy(r+f*k,c+dc*k)) out.push([r+f*k,c+dc*k]);
+      break;
+    }
+    case 'B': {
+      const f = fwd(pc.p);
+      for (let k=1; k<=2; k++) for (let dc=-k; dc<=k; dc++) if (enemy(r+f*k,c+dc)) out.push([r+f*k,c+dc]);
+      break;
+    }
+    case 'N':
+      for (let dr=-2; dr<=2; dr++) for (let dc=-2; dc<=2; dc++)
+        if (Math.max(Math.abs(dr),Math.abs(dc)) === 2 && enemy(r+dr,c+dc)) out.push([r+dr,c+dc]);
+      break;
+  }
+  return out;
+}
+
+const has = (list,r,c) => list.some(([y,x]) => y===r && x===c);
+const clone = b => b.map(row => row.slice());
+function withBoard(b, fn) {
+  const saved = board; board = b;
+  try { return fn(); } finally { board = saved; }
+}
+// does a capture by (fr) land on (to)? returns a new board
+function doCapture(b, fr, to) {
+  const n = clone(b), pc = n[fr[0]][fr[1]];
+  n[to[0]][to[1]] = null;
+  if (MOVES_ON_CAPTURE[pc.t]) { n[to[0]][to[1]] = pc; n[fr[0]][fr[1]] = null; }
+  return n;
+}
+function doMove(b, fr, to) {
+  const n = clone(b);
+  n[to[0]][to[1]] = n[fr[0]][fr[1]]; n[fr[0]][fr[1]] = null;
+  return n;
+}
+// Can `side`'s king be captured by the other side on their next turn (move, then capture)?
+function kingSafe(b, side) {
+  return withBoard(b, () => {
+    let kr = -1, kc = -1;
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++)
+      if (board[r][c] && board[r][c].t === 'K' && board[r][c].p === side) { kr = r; kc = c; }
+    if (kr < 0) return false;
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+      const pc = board[r][c];
+      if (!pc || pc.p === side) continue;
+      if (has(caps(r,c), kr, kc)) return false;
+      for (const m of moves(r,c)) {
+        const b2 = doMove(board, [r,c], m);
+        if (withBoard(b2, () => has(caps(m[0],m[1]), kr, kc))) return false;
+      }
+    }
+    return true;
+  });
+}
+// ---- turn logic: move with one piece, then capture with any piece ----
+const capsOn = (b, r, c) => withBoard(b, () => caps(r, c));
+function legalCapsAt(b, r, c) {           // capture targets for (r,c) that leave our king safe
+  const side = b[r][c].p;
+  return capsOn(b, r, c).filter(cp => kingSafe(doCapture(b, [r,c], cp), side));
+}
+function eachOwn(b, side, fn) {           // fn returns truthy to stop early
+  for (let r=0; r<8; r++) for (let c=0; c<8; c++)
+    if (b[r][c] && b[r][c].p === side && fn(r,c)) return true;
+  return false;
+}
+const anyLegalCap = (b, side) => eachOwn(b, side, (r,c) => legalCapsAt(b,r,c).length > 0);
+function legalMovesAt(r,c) {              // moves after which some legal finish exists
+  const side = board[r][c].p;
+  return moves(r,c).filter(m => {
+    const b1 = doMove(board, [r,c], m);
+    return kingSafe(b1, side) || anyLegalCap(b1, side);
+  });
+}
+function hasAnyLegalTurn(side) {
+  if (kingSafe(board, side)) return true;  // passing is legal
+  return eachOwn(board, side, (r,c) => legalMovesAt(r,c).length > 0) || anyLegalCap(board, side);
+}
+
+function endTurn() {
+  turn = turn === 'w' ? 'b' : 'w'; phase = 'select'; sel = null; mvList = []; capList = [];
+  inCheck = !kingSafe(board, turn);
+  if (!hasAnyLegalTurn(turn)) over = inCheck ? 'mate' : 'stalemate';
+  render();
+}
+function enterCapture() {
+  phase = 'capture'; sel = null; capList = [];
+  eachOwn(board, turn, (r,c) => { const t = legalCapsAt(board,r,c); if (t.length) capList.push({r,c,t}); });
+  if (!capList.length && kingSafe(board, turn)) { endTurn(); return; }
+  render();
+}
+function click(r,c) {
+  if (over) return;
+  const pc = board[r][c];
+  if (phase === 'capture') {
+    if (sel) {
+      const e = capList.find(x => x.r===sel.r && x.c===sel.c);
+      if (e && has(e.t, r, c)) { board = doCapture(board, [sel.r,sel.c], [r,c]); endTurn(); return; }
+    }
+    sel = capList.some(x => x.r===r && x.c===c) ? {r,c} : null;
+    render(); return;
+  }
+  if (phase === 'move' && has(mvList, r, c)) {
+    board = doMove(board, [sel.r,sel.c], [r,c]);
+    enterCapture(); return;
+  }
+  if (pc && pc.p === turn) { sel = {r,c}; mvList = legalMovesAt(r,c); phase = 'move'; }
+  else { sel = null; mvList = []; phase = 'select'; }
+  render();
+}
+
+function render() {
+  const el = document.getElementById('board');
+  el.innerHTML = '';
+  const mv = phase === 'move' ? mvList : [];
+  const cp = phase === 'capture' && sel ? (capList.find(x => x.r===sel.r && x.c===sel.c) || {t:[]}).t : [];
+  for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+    const d = document.createElement('div');
+    d.className = 'sq ' + ((r+c)%2 ? 'd' : 'l');
+    const pc = board[r][c];
+    if (sel && sel.r===r && sel.c===c) d.classList.add('sel');
+    if (phase === 'capture' && capList.some(x => x.r===r && x.c===c)) d.classList.add('can');
+    if (inCheck && pc && pc.t === 'K' && pc.p === turn) d.classList.add('chk');
+    if (has(mv,r,c)) d.classList.add('mv');
+    if (has(cp,r,c)) d.classList.add('cp');
+    if (pc) {
+      const p = document.createElement('div');
+      p.className = 'piece ' + pc.p; p.title = NAME[pc.t];
+      p.innerHTML = `<svg viewBox="0 0 100 100">${ART[pc.t](P[pc.p])}</svg>`;
+      d.appendChild(p);
+    }
+    if (c === 0) { const l = document.createElement('span'); l.className = 'lbl rank'; l.textContent = 8 - r; d.appendChild(l); }
+    if (r === 7) { const l = document.createElement('span'); l.className = 'lbl file'; l.textContent = 'abcdefgh'[c]; d.appendChild(l); }
+    d.onclick = () => click(r,c);
+    el.appendChild(d);
+  }
+  const who = turn === 'w' ? 'White' : 'Black', other = turn === 'w' ? 'Black' : 'White';
+  const chk = inCheck ? ' — you are in CHECK!' : '';
+  let msg;
+  if (over === 'mate') msg = `🏆 Checkmate! ${other} wins.`;
+  else if (over === 'stalemate') msg = `🤝 Stalemate — draw.`;
+  else if (phase === 'select') msg = `${who}: pick a piece to MOVE${chk}`;
+  else if (phase === 'move') msg = mvList.length ? `${who}: move ${NAME[board[sel.r][sel.c].t]} (green dots)` : `${who}: that piece has no legal move${chk}`;
+  else msg = sel ? `${who}: pick a red target to capture` : `${who}: now CAPTURE with any highlighted piece` + (kingSafe(board, turn) ? ' (or skip)' : '');
+  document.getElementById('status').textContent = msg;
+  const sm = document.getElementById('skipMove'), sc = document.getElementById('skipCap');
+  sm.disabled = !!over || phase === 'capture' || !anyLegalCap(board, turn);
+  sc.textContent = phase === 'capture' ? 'Skip capture / end turn' : 'Pass turn';
+  sc.disabled = !!over || !kingSafe(board, turn);
+}
+document.getElementById('skipMove').onclick = () => { if (!over && phase !== 'capture') enterCapture(); };
+document.getElementById('skipCap').onclick = () => { if (!over) endTurn(); };
+document.getElementById('restart').onclick = init;
+document.body.insertAdjacentHTML("afterbegin", DEFS);
+init();
+</script>
+</body>
+</html>
